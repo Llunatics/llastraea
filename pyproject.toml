@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llastraea"
+version = "1.0.0"
+description = "A trust court for open-source projects: secrets, dependencies, provenance, and licence trials with a verdict"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Llunatics" }]
+keywords = ["security", "supply-chain", "trust", "audit", "cli"]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Llunatics/llastraea"
+
+[project.scripts]
+llastraea = "llastraea.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["llastraea*"]
