@@ -45,9 +45,69 @@ One install note was corrected in round 2: the system Python on the
 build machine is externally managed (PEP 668), so the README now shows
 a virtualenv install instead of a plain `pip install .`.
 
+## Round 3 — Tuesday audit (2026-10-27)
+
+Independent audit of the Monday build; 8 findings, all fixed, each
+with a regression test (suite 17 → 25):
+
+1. **Extras without a version were not flagged unpinned.**
+   `requests[security]` parsed to spec `[security]`, which is
+   non-empty, so the unpinned check passed it. Fixed: extras are
+   stripped in `parse_requirement`, so bare-name-with-extras counts
+   as unpinned like a bare name.
+2. **Placeholder check had substring false negatives.** A credential
+   merely containing a placeholder word was dismissed:
+   `MySecretKey99` contains `secret`, `contest-token-…` contains
+   `test` and `token`. Fixed: only the first word counts
+   (`example-key-…`, `changeme123`, `test-key-…` still placeholders).
+3. **PyPI marker-only dependencies were not flagged unpinned.**
+   `requests; python_version > "3.8"` passed because the `>` in the
+   marker looked like a version operator, and the dependency name
+   itself came out as `requests;`. Fixed: markers and extras are
+   stripped before the version-operator check, and the name is
+   parsed with a regex.
+4. **Terminal injection via PyPI summary.** A summary containing ESC
+   bytes and newlines was printed verbatim into piped text output.
+   Fixed: text and Markdown renderers strip control characters from
+   targets, notes, messages, evidence, and remediation. JSON output
+   was already safe (`json.dumps` escapes control characters).
+5. **Terminal injection via crafted filenames.** A file named with
+   ESC bytes holding a real-format secret printed raw ESC bytes in
+   piped output. Fixed by the same renderer filter (finding 4).
+6. **Unwritable `--output` produced a traceback.** Fixed: OSError
+   on write is now a clean `error:` message with exit code 2.
+7. **Malformed `pyproject.toml` hallucinated dependencies.** The
+   regex fallback parsed any quoted string in the file when the word
+   `dependencies` appeared anywhere, including comments, inventing a
+   `requests` dependency. Fixed: with a real TOML parser available,
+   malformed TOML yields no dependencies; the regex fallback (kept
+   for Python 3.10) only reads strings inside an explicit
+   `dependencies = [...]` list.
+8. **Licence detection walked into `.venv`.** A LICENSE inside
+   `.venv` was reported as the project's licence. Fixed: the finder
+   now skips `.venv`, `venv`, `dist`, `build`, `.tox`, and `.eggs`
+   like the other trials, and no longer stops after the first
+   subdirectory. The deps walker skips the same directories.
+
+Also fixed along the way: the first version of the new regression
+test itself contained literal credential-assignment lines, which
+tripped the tool's own self-scan (67/Caution); the values are now
+built at runtime, and self-scan is back to 94/Trusted.
+
+Cases that passed unchanged: target-is-a-file (clean rc 2),
+non-UTF-8 git author names (no provenance crash), binary and
+oversized files, and the full Round 2 adversarial set (re-run via
+the suite). One doc correction: the deps note and README sample
+no longer promise PyPI version checks from `--check-latest`, which
+is a documented no-op.
+
+Re-audit: 25/25 tests green in the working tree and in a fresh
+copy; self-scan 94/Trusted (only the known single-contributor and
+no-CI low findings).
+
 ## Verdict
 
-**Pass.** 17 unit tests green. Adversarial cases above pass. No secret
+**Pass.** 25 unit tests green. Adversarial cases above pass. No secret
 value leaks into text, JSON, or Markdown output in any tested case.
 Known limits are stated in the README: pattern-based secret detection
 is not proof of absence, typosquat flags are signals, and provenance

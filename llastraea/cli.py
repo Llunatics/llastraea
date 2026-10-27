@@ -54,8 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         output = render_text(verdict, use_colour)
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(output + "\n")
+        try:
+            with open(args.output, "w", encoding="utf-8") as fh:
+                fh.write(output + "\n")
+        except OSError as exc:
+            print(f"error: cannot write {args.output!r}: {exc}",
+                  file=sys.stderr)
+            return 2
     else:
         print(output)
     return 0 if verdict.overall != "Guilty" else 1

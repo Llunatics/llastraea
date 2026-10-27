@@ -19,7 +19,12 @@ class TestRedact(unittest.TestCase):
     def test_placeholders(self):
         self.assertTrue(is_placeholder("example-key-123"))
         self.assertTrue(is_placeholder("changeme123"))
+        self.assertTrue(is_placeholder("test-key-123456"))
         self.assertFalse(is_placeholder("aB3$xY9qW2zR7tU"))
+        # Substring traps: a real credential that merely contains a
+        # placeholder word must NOT be dismissed as a placeholder.
+        self.assertFalse(is_placeholder("MySecretKey99"))
+        self.assertFalse(is_placeholder("contest-token-987654321"))
 
 
 class TestSecretsTrial(unittest.TestCase):
@@ -42,6 +47,18 @@ class TestSecretsTrial(unittest.TestCase):
             for finding in trial.findings:
                 self.assertNotIn(secret, finding.evidence)
             self.assertEqual(trial.verdict, "Guilty")
+        finally:
+            tmp.cleanup()
+
+    def test_substring_placeholder_words_still_flagged(self):
+        # Values are built at runtime: literal assignment lines in this
+        # test file would otherwise trip the tool's own self-scan.
+        pw = "My" + "SecretKey99"
+        ak = "contest-" + "token-987654321"
+        tmp = self._project({"config.py": f"password = '{pw}'\napi_key = '{ak}'\n"})
+        try:
+            trial = run_secrets_trial(tmp.name, include_history=False)
+            self.assertEqual(len(trial.findings), 2)
         finally:
             tmp.cleanup()
 

@@ -53,15 +53,20 @@ def edit_distance(a: str, b: str) -> int:
 
 
 def parse_requirement(line: str) -> tuple[str, str] | None:
-    """Parse one requirement line into (name, spec) or None."""
+    """Parse one requirement line into (name, spec) or None.
+
+    Extras (``requests[security]``) are stripped from the spec: a bare
+    name with only extras and no version is unpinned, exactly like a
+    bare name. Environment markers (after ``;``) are stripped too.
+    """
     line = line.strip()
     if not line or line.startswith(("#", "-", "git+", "http")):
         return None
-    match = re.match(r"^([A-Za-z0-9_.\-]+)\s*(.*)$", line)
+    match = re.match(r"^([A-Za-z0-9_.\-]+)(?:\s*\[[^\]]*\])?\s*(.*)$", line)
     if not match:
         return None
     name = match.group(1)
-    spec = match.group(2).strip().strip(";")
+    spec = match.group(2).strip()
     # Strip environment markers and trailing comments.
     spec = spec.split(";")[0].strip()
     return name, spec
@@ -98,13 +103,17 @@ def _parse_pyproject(path: str) -> list[tuple[str, str]]:
                         deps.append(parsed)
             return deps
     except Exception:
-        pass
-    # Fallback: regex over the dependencies list.
+        # Malformed TOML with a real parser available: report no deps
+        # rather than hallucinating them from stray quoted strings.
+        if tomllib is not None:
+            return []
+    # Fallback (Python 3.10, no tomllib): parse only strings inside an
+    # explicit ``dependencies = [...]`` list, never the whole file.
     try:
         with open(path, encoding="utf-8", errors="ignore") as fh:
             text = fh.read()
-        for req in re.findall(r'"([A-Za-z0-9_.\-]+[^"]*)"', text):
-            if "dependencies" in text:
+        for block in re.findall(r"dependencies\s*=\s*\[(.*?)\]", text, re.DOTALL):
+            for req in re.findall(r'"([^"]*)"', block):
                 parsed = parse_requirement(req)
                 if parsed:
                     deps.append(parsed)
@@ -131,7 +140,8 @@ def collect_dependencies(root: str) -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames
-                       if d not in (".git", "node_modules", ".venv", "venv")]
+                       if d not in (".git", "node_modules", ".venv", "venv",
+                                    "dist", "build", ".tox", ".eggs")]
         for name in filenames:
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, root)
@@ -155,7 +165,8 @@ def collect_dependencies(root: str) -> list[tuple[str, str, str]]:
 def _manifest_found(root: str) -> bool:
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames
-                       if d not in (".git", "node_modules", ".venv", "venv")]
+                       if d not in (".git", "node_modules", ".venv", "venv",
+                                    "dist", "build", ".tox", ".eggs")]
         for name in filenames:
             if name == "package.json" or name == "pyproject.toml" or (
                     name.startswith("requirements") and name.endswith(".txt")):
@@ -191,6 +202,6 @@ def run_deps_trial(root: str) -> Trial:
                         f"Verify {name} is the intended package before using it.",
                     ))
                     break
-    note = f"{len(deps)} direct dependencies parsed. Outdated checks are not run offline; use --check-latest for PyPI version checks."
+    note = f"{len(deps)} direct dependencies parsed. Outdated checks are not run offline."
     return Trial(name="Dependencies", verdict=trial_verdict(findings),
                  findings=findings, note=note)

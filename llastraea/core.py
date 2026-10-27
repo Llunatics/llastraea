@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 
 from .deps import run_deps_trial
@@ -52,8 +53,18 @@ def judge_pypi_package(name: str) -> Verdict:
     for req in requires:
         if not req:
             continue
-        dep_name = req.split()[0].strip("()") if req else req
-        if "(" not in req and ";" not in req and ">" not in req and "=" not in req:
+        # Name: first word, before extras, markers, or version specs.
+        name_match = re.match(r"([A-Za-z0-9_.\-]+)", req.strip())
+        dep_name = name_match.group(1) if name_match else req
+        # Pinned-ness: strip the environment marker (after ";") and any
+        # extras, then look for a version operator in what remains.
+        # A marker-only requirement (``requests; python_version > "3.8"``)
+        # is unpinned: the ">" belongs to the marker, not to a version.
+        base = req.split(";")[0].strip()
+        base = re.sub(r"\[[^\]]*\]", "", base)
+        versioned = any(op in base for op in
+                         ("==", ">=", "<=", "~=", "!=", ">", "<", "(", "="))
+        if not versioned:
             dep_findings.append(Finding(
                 "medium", f"Unpinned dependency: {dep_name}",
                 f"PyPI requires_dist: {dep_name}",

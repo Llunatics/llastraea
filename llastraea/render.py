@@ -29,6 +29,19 @@ def _colour(name: str, text: str, enabled: bool) -> str:
     return f"{COLOURS.get(name, '')}{text}{COLOURS['reset']}"
 
 
+def _safe(text: str) -> str:
+    """Strip control characters from rendered output.
+
+    Trial notes, evidence, and messages can carry attacker-controlled
+    text: a PyPI summary, or a file path inside a judged project.
+    Printed raw, an ESC byte recolours the user's terminal and a
+    newline forges output lines. JSON output needs no help here —
+    ``json.dumps`` already escapes control characters — but text and
+    Markdown are printed verbatim, so they pass through this filter.
+    """
+    return "".join(ch for ch in text if ch >= " " and ch != "\x7f")
+
+
 def gauge(score: int, tty: bool) -> str:
     filled = round(score / 100 * 20)
     if tty:
@@ -60,7 +73,7 @@ def render_text(verdict: Verdict, use_colour: bool) -> str:
 
     lines: list[str] = []
     lines.append(top)
-    title_plain = f" llastraea -- trust court for {shorten_middle(verdict.target, 30)}"
+    title_plain = f" llastraea -- trust court for {shorten_middle(_safe(verdict.target), 30)}"
     lines.append(panel(title_plain))
     lines.append(sep)
     overall_plain = f" VERDICT: {verdict.overall.upper()}"
@@ -72,31 +85,31 @@ def render_text(verdict: Verdict, use_colour: bool) -> str:
     lines.append("")
     for trial in verdict.trials:
         verdict_word = _colour(trial.verdict, trial.verdict, use_colour)
-        lines.append(f"[{trial.name}]  {verdict_word}")
+        lines.append(f"[{_safe(trial.name)}]  {verdict_word}")
         if trial.note:
-            lines.append(f"  {trial.note}")
+            lines.append(f"  {_safe(trial.note)}")
         if not trial.findings:
             lines.append("  No findings.")
         for finding in trial.findings:
             sev_name = "Guilty" if finding.severity in ("critical", "high") else "Caution"
             sev = _colour(sev_name, finding.severity.upper(), use_colour)
-            lines.append(f"  - [{sev}] {finding.message}")
+            lines.append(f"  - [{sev}] {_safe(finding.message)}")
             if finding.evidence:
-                lines.append(f"      evidence: {finding.evidence}")
+                lines.append(f"      evidence: {_safe(finding.evidence)}")
             if finding.remediation:
-                lines.append(f"      fix: {finding.remediation}")
+                lines.append(f"      fix: {_safe(finding.remediation)}")
         lines.append("")
     if verdict.remediation:
         lines.append("Remediation checklist:")
         for i, item in enumerate(verdict.remediation, 1):
-            lines.append(f"  {i}. {item}")
+            lines.append(f"  {i}. {_safe(item)}")
         lines.append("")
     return "\n".join(lines)
 
 
 def render_markdown(verdict: Verdict) -> str:
     lines: list[str] = []
-    lines.append(f"# llastraea verdict: {verdict.target}")
+    lines.append(f"# llastraea verdict: {_safe(verdict.target)}")
     lines.append("")
     lines.append(f"- **Score:** {verdict.score}/100")
     lines.append(f"- **Overall verdict:** {verdict.overall}")
@@ -104,25 +117,25 @@ def render_markdown(verdict: Verdict) -> str:
     lines.append("| Trial | Verdict | Findings |")
     lines.append("| --- | --- | --- |")
     for trial in verdict.trials:
-        lines.append(f"| {trial.name} | {trial.verdict} | {len(trial.findings)} |")
+        lines.append(f"| {_safe(trial.name)} | {trial.verdict} | {len(trial.findings)} |")
     lines.append("")
     for trial in verdict.trials:
         if not trial.findings:
             continue
-        lines.append(f"## {trial.name} ({trial.verdict})")
+        lines.append(f"## {_safe(trial.name)} ({trial.verdict})")
         lines.append("")
         for finding in trial.findings:
-            lines.append(f"- **{finding.severity}** — {finding.message}")
+            lines.append(f"- **{finding.severity}** — {_safe(finding.message)}")
             if finding.evidence:
-                lines.append(f"  - Evidence: `{finding.evidence}`")
+                lines.append(f"  - Evidence: `{_safe(finding.evidence)}`")
             if finding.remediation:
-                lines.append(f"  - Fix: {finding.remediation}")
+                lines.append(f"  - Fix: {_safe(finding.remediation)}")
         lines.append("")
     if verdict.remediation:
         lines.append("## Remediation checklist")
         lines.append("")
         for item in verdict.remediation:
-            lines.append(f"- [ ] {item}")
+            lines.append(f"- [ ] {_safe(item)}")
         lines.append("")
     return "\n".join(lines)
 

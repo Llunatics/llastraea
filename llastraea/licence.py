@@ -25,13 +25,20 @@ LICENCE_PATTERNS = [
 
 
 def _find_file(root: str, names: list[str]) -> str | None:
+    """Find a project file, root first, skipping vendored directories.
+
+    The root is yielded first by os.walk, so a root LICENSE/README
+    always wins. Skipped directories match the secrets and deps
+    trials: a LICENSE inside .venv is the environment's, not the
+    project's, and must not be mistaken for it.
+    """
+    skip = (".git", "node_modules", ".venv", "venv",
+            "dist", "build", ".tox", ".eggs")
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules")]
+        dirnames[:] = [d for d in dirnames if d not in skip]
         for name in filenames:
             if name.upper() in names:
                 return os.path.join(dirpath, name)
-        if dirpath != root:
-            break
     return None
 
 

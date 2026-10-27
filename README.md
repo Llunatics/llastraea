@@ -60,7 +60,7 @@ fails the step.
   No findings.
 
 [Dependencies]  Trusted
-  1 direct dependencies parsed. Outdated checks are not run offline; use --check-latest for PyPI version checks.
+  1 direct dependencies parsed. Outdated checks are not run offline.
   No findings.
 
 [Provenance]  Dismissed
